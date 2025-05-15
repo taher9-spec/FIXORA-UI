@@ -2,22 +2,48 @@
 <html>
 <head>
   <style>
-    body { background: #1a1a1a; color: #fff; font-family: Arial; }
+    body { background: #1a1a1a; color: #fff; font-family: Arial; margin: 0; }
     .container { max-width: 800px; margin: 20px auto; }
-    .chat-window { background: #2c2c2c; padding: 10px; height: 400px; border-radius: 10px; }
-    .messages { height: 350px; overflow-y: scroll; }
-    input { width: 100%; padding: 10px; background: #3c3c3c; border: none; color: #fff; }
-    button { background: #007bff; color: #fff; padding: 10px 20px; border: none; margin: 10px; cursor: pointer; }
+    .chat-window { background: #2c2c2c; padding: 10px; height: 400px; border-radius: 10px; overflow-y: scroll; }
+    .message { padding: 5px; margin: 5px; background: #3c3c3c; border-radius: 5px; }
+    input { width: 70%; padding: 10px; background: #3c3c3c; border: none; color: #fff; }
+    button { background: #007bff; color: #fff; padding: 10px 20px; border: none; margin: 5px; cursor: pointer; }
+    .buttons { margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="chat-window">
-      <div class="messages"></div>
-      <input type="text" placeholder="Chat with agents...">
+    <div class="chat-window" id="chat">
+      <div class="message">Agent: Hello, welcome to FIXORA!</div>
     </div>
-    <button onclick="alert('Supabase')">Supabase</button>
-    <button onclick="alert('GitHub')">GitHub</button>
+    <input type="text" id="messageInput" placeholder="Type to chat with agents...">
+    <button onclick="sendMessage()">Send</button>
+    <div class="buttons">
+      <button onclick="alert('Connect to Supabase')">Supabase</button>
+      <button onclick="alert('Connect to GitHub')">GitHub</button>
+    </div>
   </div>
+  <script>
+    function sendMessage() {
+      const input = document.getElementById("messageInput").value;
+      if (input) {
+        const chat = document.getElementById("chat");
+        const message = document.createElement("div");
+        message.className = "message";
+        message.textContent = "You: " + input;
+        chat.appendChild(message);
+        chat.scrollTop = chat.scrollHeight;
+        document.getElementById("messageInput").value = "";
+        // Simulate agent reply
+        setTimeout(() => {
+          const reply = document.createElement("div");
+          reply.className = "message";
+          reply.textContent = "Agent: Thanks for your message!";
+          chat.appendChild(reply);
+          chat.scrollTop = chat.scrollHeight;
+        }, 1000);
+      }
+    }
+  </script>
 </body>
 </html>
