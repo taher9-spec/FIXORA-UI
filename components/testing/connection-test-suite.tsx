@@ -55,15 +55,25 @@ export function ConnectionTestSuite({ connectionId, connectionType }: Connection
 
         try {
           // Run the test
-          const result = await test.run(connectionId)
+          const response = await fetch(`/api/connections/${connectionId}/test`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              test: test.id,
+              params: test.params || {},
+            }),
+          })
 
+          const result = await response.json()
           const duration = Date.now() - startTime
 
           // Add the result
           const testResult: TestResult = {
             name: test.name,
             success: result.success,
-            message: result.message,
+            message: result.message || (result.success ? "Test passed" : "Test failed"),
             details: result.details,
             duration,
           }
@@ -85,6 +95,9 @@ export function ConnectionTestSuite({ connectionId, connectionType }: Connection
 
           setResults((prev) => [...prev, testResult])
         }
+
+        // Small delay between tests
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
       // Update final progress
@@ -117,248 +130,72 @@ export function ConnectionTestSuite({ connectionId, connectionType }: Connection
       case "github":
         return [
           {
+            id: "verifyConnection",
             name: "Connection Verification",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/verify`)
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Verification failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
           {
+            id: "fetchUserProfile",
             name: "User Profile Fetch",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "fetchUserProfile",
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "User profile fetch failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
           {
+            id: "fetchRepositories",
             name: "Repository List Fetch",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "fetchRepositories",
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Repository list fetch failed")
-              }
-
-              return await response.json()
-            },
+            params: { limit: 5 },
           },
         ]
       case "google":
         return [
           {
+            id: "verifyConnection",
             name: "Connection Verification",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/verify`)
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Verification failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
           {
+            id: "fetchUserProfile",
             name: "User Profile Fetch",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "fetchUserProfile",
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "User profile fetch failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
         ]
       case "supabase":
         return [
           {
+            id: "verifyConnection",
             name: "Connection Verification",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/verify`)
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Verification failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
           {
+            id: "queryDatabase",
             name: "Database Query Test",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "queryDatabase",
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Database query failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
         ]
       case "mcp":
         return [
           {
+            id: "verifyConnection",
             name: "Connection Verification",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/verify`)
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Verification failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
           {
+            id: "createContext",
             name: "Context Creation Test",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "createContext",
-                  params: {
-                    content: "Test context content",
-                    metadata: {
-                      test: true,
-                      timestamp: new Date().toISOString(),
-                    },
-                  },
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Context creation failed")
-              }
-
-              return await response.json()
-            },
-          },
-          {
-            name: "Context Retrieval Test",
-            run: async (connectionId: string) => {
-              // First create a context
-              const createResponse = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "createContext",
-                  params: {
-                    content: "Test context for retrieval",
-                    metadata: {
-                      test: true,
-                      timestamp: new Date().toISOString(),
-                    },
-                  },
-                }),
-              })
-
-              if (!createResponse.ok) {
-                const error = await createResponse.json()
-                throw new Error(error.error || "Context creation failed")
-              }
-
-              const createData = await createResponse.json()
-              const contextId = createData.details?.id
-
-              if (!contextId) {
-                throw new Error("No context ID returned from creation")
-              }
-
-              // Now retrieve the context
-              const response = await fetch(`/api/connections/${connectionId}/test`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  test: "getContext",
-                  params: {
-                    contextId,
-                  },
-                }),
-              })
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Context retrieval failed")
-              }
-
-              return await response.json()
+            params: {
+              content: "Test context content",
+              metadata: {
+                test: true,
+                timestamp: new Date().toISOString(),
+              },
             },
           },
         ]
       default:
         return [
           {
+            id: "verifyConnection",
             name: "Connection Verification",
-            run: async (connectionId: string) => {
-              const response = await fetch(`/api/connections/${connectionId}/verify`)
-
-              if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || "Verification failed")
-              }
-
-              return await response.json()
-            },
+            params: {},
           },
         ]
     }

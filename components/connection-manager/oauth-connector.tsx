@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle, AlertCircle, Github, ChromeIcon as Google } from "lucide-react"
+import { CheckCircle, AlertCircle, Github, ChromeIcon as Google, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { getOrigin } from "@/lib/utils/environment"
 
@@ -43,6 +43,7 @@ export function OAuthConnector({ provider, onSuccess, onError }: OAuthConnectorP
   const connectToProvider = async () => {
     setIsConnecting(true)
     setStatus("connecting")
+    setErrorMessage("")
 
     try {
       // Step 1: Register or fetch OAuth app credentials
@@ -58,13 +59,34 @@ export function OAuthConnector({ provider, onSuccess, onError }: OAuthConnectorP
       })
 
       if (!credentialsResponse.ok) {
-        throw new Error(`Failed to get ${config.name} credentials`)
+        const errorText = await credentialsResponse.text()
+        console.error(`${config.name} credentials response:`, errorText)
+
+        // Check if the response is HTML (error page)
+        if (errorText.includes("<!DOCTYPE") || errorText.includes("<html")) {
+          throw new Error(`${config.name} OAuth endpoint not found. Please check the server configuration.`)
+        }
+
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.error || `Failed to get ${config.name} credentials`)
+        } catch (parseError) {
+          throw new Error(`Failed to get ${config.name} credentials: ${credentialsResponse.status}`)
+        }
       }
 
       const { clientId, authUrl } = await credentialsResponse.json()
 
       // Step 2: Open OAuth authorization window
-      const authWindow = window.open(authUrl, `${config.name} Authorization`, "width=600,height=700")
+      const authWindow = window.open(
+        authUrl,
+        `${config.name} Authorization`,
+        "width=500,height=600,scrollbars=yes,resizable=yes",
+      )
+
+      if (!authWindow) {
+        throw new Error("Failed to open authorization window. Please allow popups for this site.")
+      }
 
       // Step 3: Listen for the callback message
       const handleCallback = async (event: MessageEvent) => {
@@ -99,6 +121,16 @@ export function OAuthConnector({ provider, onSuccess, onError }: OAuthConnectorP
       }
 
       window.addEventListener("message", handleCallback)
+
+      // Set a timeout to clean up the listener if the window is closed manually
+      setTimeout(() => {
+        if (authWindow.closed) {
+          window.removeEventListener("message", handleCallback)
+          setStatus("error")
+          setErrorMessage("Authorization window was closed")
+          onError("Authorization window was closed")
+        }
+      }, 1000)
     } catch (error) {
       console.error(`${config.name} connection error:`, error)
       setStatus("error")
@@ -143,14 +175,29 @@ export function OAuthConnector({ provider, onSuccess, onError }: OAuthConnectorP
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
+
+        {status === "connecting" && (
+          <Alert className="bg-blue-50 border-blue-200">
+            <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+            <AlertTitle className="text-blue-800">Connecting...</AlertTitle>
+            <AlertDescription className="text-blue-700">
+              Please complete the authorization in the popup window.
+            </AlertDescription>
+          </Alert>
+        )}
       </CardContent>
       <CardFooter>
         <Button onClick={connectToProvider} disabled={isConnecting || status === "success"} className="w-full">
-          {isConnecting
-            ? `Connecting to ${config.name}...`
-            : status === "success"
-              ? `Connected to ${config.name}`
-              : `Connect with ${config.name}`}
+          {isConnecting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Connecting to {config.name}...
+            </>
+          ) : status === "success" ? (
+            `Connected to ${config.name}`
+          ) : (
+            `Connect with ${config.name}`
+          )}
         </Button>
       </CardFooter>
     </Card>

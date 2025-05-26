@@ -115,7 +115,9 @@ export async function initializeConfig(): Promise<void> {
   const defaults: Record<string, string> = {
     app_name: "Fixora UI",
     app_version: "1.0.0",
-    ai_provider: "openai",
+    ai_provider: "openroute",
+    openroute_api_key: encryptSecret("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"),
+    openroute_model_id: "openai/gpt-4o",
   }
 
   for (const [key, value] of Object.entries(defaults)) {
@@ -124,3 +126,6 @@ export async function initializeConfig(): Promise<void> {
     }
   }
 }
+
+// Initialize the config when this module is imported
+initializeConfig()

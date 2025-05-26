@@ -8,7 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input"
 import { Avatar } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Loader2, Send, User, Bot } from "lucide-react"
+import { Loader2, Send, User, Bot, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
@@ -17,6 +17,7 @@ import { anthropic } from "@ai-sdk/anthropic"
 import { getConfigValue } from "@/lib/config/config-manager"
 import { decryptSecret } from "@/lib/utils/encryption"
 import { getConnectionById } from "@/lib/connections-service"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface Message {
   id: string
@@ -36,8 +37,56 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [currentAssistantMessage, setCurrentAssistantMessage] = useState("")
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+
+  // Check configuration on mount
+  useEffect(() => {
+    const checkConfig = async () => {
+      try {
+        // Get the AI provider and API key from config
+        const provider = await getConfigValue("ai_provider")
+        if (!provider) {
+          setConfigError("No AI provider configured. Please set up your API key in the API Keys tab.")
+          return
+        }
+
+        const apiKeyEncrypted = await getConfigValue(`${provider}_api_key`)
+        if (!apiKeyEncrypted) {
+          setConfigError(`No API key found for ${provider}. Please set up your API key in the API Keys tab.`)
+          return
+        }
+
+        const modelId = await getConfigValue(`${provider}_model_id`)
+        if (!modelId) {
+          setConfigError(`No model selected for ${provider}. Please select a model in the Models tab.`)
+          return
+        }
+
+        setIsConfigLoaded(true)
+      } catch (error) {
+        console.error("Error checking configuration:", error)
+        setConfigError("Failed to load configuration. Please check your settings.")
+      }
+    }
+
+    checkConfig()
+  }, [])
+
+  // Add a welcome message when the component mounts
+  useEffect(() => {
+    if (initialMessages.length === 0 && messages.length === 0) {
+      const welcomeMessage: Message = {
+        id: "welcome",
+        role: "assistant",
+        content: "Hello! I'm your AI assistant. How can I help you today?",
+        timestamp: new Date(),
+      }
+      setMessages([welcomeMessage])
+    }
+  }, [initialMessages.length, messages.length])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -50,6 +99,15 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
     e.preventDefault()
 
     if (!input.trim() || isLoading) {
+      return
+    }
+
+    if (!isConfigLoaded) {
+      toast({
+        title: "Configuration Error",
+        description: configError || "Please configure your API key and model before using the chat.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -73,13 +131,13 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
       const modelId = (await getConfigValue(`${provider}_model_id`)) || getDefaultModelId(provider)
 
       if (!apiKeyEncrypted) {
-        throw new Error(`No API key found for ${provider}`)
+        throw new Error(`No API key found for ${provider}. Please configure your API key in the API Keys tab.`)
       }
 
       const apiKey = decryptSecret(apiKeyEncrypted)
 
       if (!apiKey) {
-        throw new Error(`Failed to decrypt API key for ${provider}`)
+        throw new Error(`Failed to decrypt API key for ${provider}. Please reconfigure your API key.`)
       }
 
       // Get available connections for tools
@@ -88,13 +146,28 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
       // Create the model based on the provider
       const model = createModel(provider, apiKey, modelId)
 
+      // Prepare messages array with a system message
+      const formattedMessages = [
+        {
+          role: "system",
+          content: "You are a helpful AI assistant that can answer questions and use tools when necessary.",
+        },
+        ...messages
+          .filter((msg) => msg.role !== "system") // Filter out any existing system messages
+          .map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        {
+          role: "user",
+          content: input,
+        },
+      ]
+
       // Stream the response
       const { textStream } = streamText({
         model,
-        messages: messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
+        messages: formattedMessages,
         tools: tools.concat(await createConnectionTools(connections)),
       })
 
@@ -145,6 +218,15 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
         return groq(modelId, { apiKey })
       case "anthropic":
         return anthropic(modelId, { apiKey })
+      case "openroute":
+        return openai(modelId, {
+          baseURL: "https://openrouter.ai/api/v1",
+          apiKey,
+          defaultHeaders: {
+            "HTTP-Referer": "https://fixora.vercel.app",
+            "X-Title": "Fixora UI",
+          },
+        })
       default:
         return openai(modelId, { apiKey })
     }
@@ -158,6 +240,8 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
         return "llama3-70b-8192"
       case "anthropic":
         return "claude-3-opus-20240229"
+      case "openroute":
+        return "openai/gpt-4o"
       default:
         return "gpt-4o"
     }
@@ -294,6 +378,14 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
         <CardTitle>Agent Chat</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
+        {configError && (
+          <Alert variant="destructive" className="mx-4 mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Configuration Error</AlertTitle>
+            <AlertDescription>{configError}</AlertDescription>
+          </Alert>
+        )}
+
         <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -348,10 +440,10 @@ export function AgentChatPanel({ initialMessages = [], tools = [] }: AgentChatPa
             placeholder="Type your message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || !isConfigLoaded}
             className="flex-1"
           />
-          <Button type="submit" disabled={isLoading || !input.trim()}>
+          <Button type="submit" disabled={isLoading || !input.trim() || !isConfigLoaded}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="sr-only">Send</span>
           </Button>

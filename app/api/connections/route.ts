@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server"
-import { createConnection, validateConnectionCredentials } from "@/lib/connections-service"
-import { encryptSecret } from "@/lib/utils/encryption"
+import { createConnection, getAllConnections } from "@/lib/db"
+import { encryptSecret } from "@/lib/encryption"
 
 export async function GET() {
   try {
-    const { getAllConnections } = await import("@/lib/connections-service")
     const connections = await getAllConnections()
 
-    // Remove sensitive data from the response
-    const sanitizedConnections = connections.map((conn) => {
-      const { credentials, ...rest } = conn
-      return {
-        ...rest,
-        hasCredentials: !!credentials,
-      }
-    })
+    // Remove sensitive data from response
+    const sanitizedConnections = connections.map((conn) => ({
+      ...conn,
+      credentials: undefined, // Don't send credentials in list
+      hasCredentials: !!conn.credentials,
+    }))
 
     return NextResponse.json({ connections: sanitizedConnections })
   } catch (error) {
@@ -25,48 +22,63 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const data = await request.json()
+    const body = await request.json()
+    console.log("Creating connection with data:", { ...body, credentials: "***" })
 
-    if (!data.type || !data.name) {
-      return NextResponse.json({ error: "Type and name are required" }, { status: 400 })
+    const { type, name, credentials } = body
+
+    if (!type || !name || !credentials) {
+      return NextResponse.json({ error: "Missing required fields: type, name, and credentials" }, { status: 400 })
     }
 
-    // Validate credentials
-    if (data.credentials) {
-      const validationResult = await validateConnectionCredentials(data.type, data.credentials)
-
-      if (!validationResult.valid) {
-        return NextResponse.json({ error: validationResult.error }, { status: 400 })
+    // Validate Supabase credentials specifically
+    if (type === "supabase") {
+      if (!credentials.url || !credentials.anonKey) {
+        return NextResponse.json(
+          {
+            error: "Supabase connections require url and anonKey",
+          },
+          { status: 400 },
+        )
       }
 
-      // Encrypt sensitive credentials
-      const encryptedCredentials: Record<string, any> = {}
-
-      for (const [key, value] of Object.entries(data.credentials)) {
-        if (typeof value === "string" && (key.includes("token") || key.includes("key") || key.includes("secret"))) {
-          encryptedCredentials[key] = encryptSecret(value as string)
-        } else {
-          encryptedCredentials[key] = value
-        }
+      // Validate URL format
+      if (!credentials.url.startsWith("https://") || !credentials.url.includes(".supabase.co")) {
+        return NextResponse.json(
+          {
+            error: "Invalid Supabase URL format. Should be https://your-project.supabase.co",
+          },
+          { status: 400 },
+        )
       }
-
-      data.credentials = encryptedCredentials
     }
 
+    // Encrypt sensitive credentials
+    const encryptedCredentials: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(credentials)) {
+      if (typeof value === "string" && (key.includes("key") || key.includes("token") || key.includes("secret"))) {
+        encryptedCredentials[key] = encryptSecret(value)
+      } else {
+        encryptedCredentials[key] = value
+      }
+    }
+
+    console.log("Creating connection with encrypted credentials")
     const connection = await createConnection({
-      type: data.type,
-      name: data.name,
+      type,
+      name,
+      credentials: encryptedCredentials,
       status: "active",
-      credentials: data.credentials,
-      metadata: data.metadata,
     })
 
-    // Remove sensitive data from the response
-    const { credentials, ...connectionWithoutCredentials } = connection
+    console.log("Connection created successfully:", connection.id)
 
-    return NextResponse.json(connectionWithoutCredentials)
+    // Return connection without sensitive data
+    const { credentials: _, ...safeConnection } = connection
+    return NextResponse.json({ ...safeConnection, hasCredentials: true })
   } catch (error) {
     console.error("Error creating connection:", error)
-    return NextResponse.json({ error: "Failed to create connection" }, { status: 500 })
+    return NextResponse.json({ error: `Failed to create connection: ${error.message}` }, { status: 500 })
   }
 }

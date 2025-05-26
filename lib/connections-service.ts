@@ -1,17 +1,4 @@
-// Connection types
-export type ConnectionType = "github" | "google" | "supabase" | "mcp" | "custom"
-
-// Connection interface
-export interface Connection {
-  id: string
-  type: ConnectionType
-  name: string
-  status: "active" | "inactive" | "error"
-  credentials?: Record<string, any>
-  metadata?: Record<string, any>
-  createdAt: Date
-  updatedAt: Date
-}
+import type { Connection, ConnectionType } from "./connections/types"
 
 // In-memory database simulation - in a real app, this would use a database
 const connections: Record<string, Connection> = {}
@@ -155,34 +142,4 @@ export async function validateConnectionCredentials(
   }
 
   return { valid: true }
-}
-
-/**
- * Creates connection types
- */
-export interface ConnectionTypes {
-  github: {
-    accessToken: string
-    refreshToken?: string
-    expiresAt?: Date
-    scope?: string
-  }
-  google: {
-    accessToken: string
-    refreshToken?: string
-    expiresAt?: Date
-    scope?: string
-  }
-  supabase: {
-    url: string
-    anonKey: string
-    serviceRoleKey: string
-    projectId?: string
-    projectRef?: string
-  }
-  mcp: {
-    baseUrl: string
-    apiKey?: string
-  }
-  custom: Record<string, any>
 }

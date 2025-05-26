@@ -4,43 +4,56 @@ export async function POST(request: Request) {
   try {
     const { url, anonKey, serviceRoleKey } = await request.json()
 
-    if (!url || !anonKey || !serviceRoleKey) {
-      return NextResponse.json({ success: false, error: "Missing required Supabase credentials" }, { status: 400 })
+    if (!url || !anonKey) {
+      return NextResponse.json({ error: "URL and anon key are required" }, { status: 400 })
     }
 
     // Validate URL format
-    if (!url.startsWith("https://")) {
-      return NextResponse.json({ success: false, error: "Supabase URL must start with https://" }, { status: 400 })
+    if (!url.startsWith("https://") || !url.includes(".supabase.co")) {
+      return NextResponse.json(
+        {
+          error: "Invalid Supabase URL format. Should be https://your-project.supabase.co",
+        },
+        { status: 400 },
+      )
     }
 
     // Extract project reference from URL
-    // Format: https://[project-ref].supabase.co
     const urlParts = url.replace("https://", "").split(".")
     const projectRef = urlParts[0]
 
-    // Test the connection by fetching the Supabase service status
-    const response = await fetch(`${url}/rest/v1/`, {
+    // Test the connection
+    const testResponse = await fetch(`${url}/rest/v1/`, {
       headers: {
         apikey: anonKey,
         Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
       },
     })
 
-    if (!response.ok) {
-      return NextResponse.json({ success: false, error: "Failed to connect to Supabase" }, { status: 400 })
+    if (!testResponse.ok) {
+      console.error("Supabase test failed:", testResponse.status, testResponse.statusText)
+      return NextResponse.json(
+        {
+          error: `Failed to connect to Supabase: ${testResponse.status} ${testResponse.statusText}`,
+        },
+        { status: 400 },
+      )
     }
 
-    // Generate a project ID (this would normally come from Supabase, but we'll create one)
-    const projectId = `supabase_${projectRef}_${Date.now()}`
-
     return NextResponse.json({
-      success: true,
-      projectRef,
-      projectId,
-      url,
+      projectId: projectRef,
+      projectRef: projectRef,
+      url: url,
+      status: "connected",
     })
   } catch (error) {
     console.error("Supabase discovery error:", error)
-    return NextResponse.json({ success: false, error: error.message || "Unknown error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: `Discovery failed: ${error.message}`,
+      },
+      { status: 500 },
+    )
   }
 }
